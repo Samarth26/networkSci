@@ -1,1 +1,11 @@
 sortedcontainers
+networkx
+pandas
+requests
+grequests
+bs4
+xlrd
+thefuzz
+matplotlib
+scipy
+lxml
