@@ -121,7 +121,11 @@ def build_graph(networkList, df):
                 if similar_names == False or same_person == True:
                     continue
 
-                graph.add_edge(main_name, co_author_name, year=publish_date)
+                # check if there is a similar name in name_lookup as the co_author_name
+                
+
+
+                graph.add_edge(main_name, co_author_name)
 
     return graph
 
