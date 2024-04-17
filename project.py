@@ -125,7 +125,7 @@ def build_graph(networkList, df):
                 
 
 
-                graph.add_edge(main_name, co_author_name)
+                graph.add_edge(main_name, co_author_name, year = publish_date)
 
     return graph
 
