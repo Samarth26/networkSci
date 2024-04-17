@@ -7,12 +7,13 @@ from bs4 import BeautifulSoup
 from collections import defaultdict
 import networkx as nx
 import json
-from thefuzz import fuzz
+#from thefuzz import fuzz
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import factorial
 from typing import Any, Dict, List, Set
+from fuzzywuzzy import fuzz
 
 from sortedcontainers import SortedList
 
@@ -98,15 +99,32 @@ def build_graph(networkList, df):
 
     for i, network in enumerate(networkList):
         print(f"{i}/{len(networkList)}", end="\r")
-        name = network['name'].lower()
+        main_name = network['name'].lower()
         for publicationList in network['publish-info']:
             for co_author_name in publicationList['co-authors']:
                 co_author_name = co_author_name.lower()
+                similar_names = False
+                same_person = False
 
-                if co_author_name not in name_lookup:
+                if fuzz.ratio(main_name.lower(), co_author_name) > 90:
+                    same_person = True
+
+                for name in name_lookup.keys():
+                    if(main_name.lower() != name.lower()):
+                        if fuzz.ratio(name.lower(), co_author_name) > 80:
+                            similar_names = True
+                            break
+               
+                  
+
+                if similar_names == False or same_person == True:
                     continue
 
-                graph.add_edge(name, co_author_name)
+                # check if there is a similar name in name_lookup as the co_author_name
+                
+
+
+                graph.add_edge(main_name, co_author_name)
 
     return graph
 
@@ -117,17 +135,52 @@ def build_graph(networkList, df):
 
 def get_network_stats(graph: nx.Graph):
     giant_component: nx.Graph = graph.subgraph(max(nx.connected_components(graph), key=len))
+    f = open("statsNetwork.txt", "a")
 
     stats = {
         "nodeCount": graph.number_of_nodes(),
+        "nodeCountGC": giant_component.number_of_nodes(),
         "edgeCount": graph.size(),
         "meanDegree": np.mean(list(dict(graph.degree()).values())),
         "meanClusteringCoeff": nx.average_clustering(graph),
         "diameter": nx.approximation.diameter(giant_component),
-        "GCSize": giant_component.number_of_nodes()
+        "GCSize": giant_component.number_of_nodes(),
+        "degree centrality": nx.degree_centrality(graph),
+        "closeness centrality": nx.closeness_centrality(graph),
+        "betweenness centrality": nx.betweenness_centrality(graph),
+        "eigenvector centrality": nx.eigenvector_centrality(giant_component),
+        "shortest path": nx.average_shortest_path_length(giant_component),
+        "average path length": nx.average_shortest_path_length(giant_component),
+        "assortativity": nx.degree_assortativity_coefficient(graph),
+        "density": nx.density(graph),
     }
 
+    f.write(str(stats))
+    f.close()
+
     return stats
+
+def plot_network(graph: nx.Graph, stats):
+    import numpy as np
+    import matplotlib.colors as mcolors
+    import matplotlib.cm as cm
+
+    cent = np.fromiter(stats.get("degree centrality").values(), float)
+    sizes = cent / np.max(cent) * 200
+    cent2 = np.fromiter(stats.get("closeness centrality").values(), float)
+    print(cent2)
+    normalize = mcolors.Normalize(vmin=cent2.min(), vmax=cent2.max())
+    colormap = cm.viridis
+
+    scalarmappaple = cm.ScalarMappable(norm=normalize, cmap=colormap)
+    scalarmappaple.set_array(cent2)
+
+    plt.colorbar(scalarmappaple, ax=plt.gca(), orientation='vertical')
+
+    pos = nx.spring_layout(graph)
+
+    nx.draw(graph, pos, node_size=sizes, node_color=sizes, cmap=colormap)
+    plt.show()
 
 
 def plot_degree_dist(input_graph, ylim=(1e-5, 1)):
@@ -511,7 +564,16 @@ def main():
     print("===========================Question 1===========================")
     plot_degree_dist(original_graph)
     plot_assortative(original_graph)
-    print(get_network_stats(original_graph))
+    try:
+        f = open("statsNetwork.txt", "r")
+        network_stats = f.read()
+        print(network_stats)
+        plot_network(original_graph, network_stats)
+    except:
+        network_stats = get_network_stats(original_graph)
+        print(network_stats)
+        plot_network(original_graph, network_stats)
+    
     print("================================================================\n")
 
 
