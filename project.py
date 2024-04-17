@@ -100,13 +100,14 @@ def build_graph(networkList, df):
         print(f"{i}/{len(networkList)}", end="\r")
         name = network['name'].lower()
         for publicationList in network['publish-info']:
+            publish_date = int(publicationList['publish-date'][0])
             for co_author_name in publicationList['co-authors']:
                 co_author_name = co_author_name.lower()
 
                 if co_author_name not in name_lookup:
                     continue
 
-                graph.add_edge(name, co_author_name)
+                graph.add_edge(name, co_author_name, year=publish_dateS)
 
     return graph
 
@@ -180,6 +181,138 @@ def plot_assortative(input_graph):
     plt.title('Average Neighbor Degree vs Degree')
     plt.show()
 
+
+##############################################################################################
+######## Code for Question 2 (network stats over time)
+##############################################################################################
+def filter_network_by_year(network, year):
+    filtered_network = network.copy()
+    edges_to_remove = [(u, v) for u, v, data in filtered_network.edges(data=True) if data['year'] != year]
+    filtered_network.remove_edges_from(edges_to_remove)
+    nodes_to_remove = [node for node in filtered_network.nodes() if filtered_network.degree(node) == 0]
+    filtered_network.remove_nodes_from(nodes_to_remove)
+    return filtered_network
+
+
+def qn2(graph: nx.Graph):
+    # calculate the properties for each year
+    time_properties = {}
+    for year in range(1972, 2024 + 1):
+        filtered_network = filter_network_by_year(graph, year)
+        network_properties = get_network_stats(filtered_network)
+        print(f"Year: {year}")
+
+        if len(network_properties) != 0:
+            time_properties[year] = network_properties
+
+        for i, value in network_properties.items():
+            print(f"{i}: {value}")
+        print("\n")
+
+    # group the properties for easier plotting
+    nodes = []
+    years = []
+    edges = []
+
+    connected_tf =[]
+
+    large_connected = []
+    num_connected = []
+    density = []
+    #average = []
+    diameter = []
+
+    for year in range(1972, 2024 + 1):
+        if str(year) in time_properties and time_properties[str(year)] is not None:
+            years.append(year)
+            nodes.append(time_properties[str(year)]['Number of nodes'])
+            edges.append(time_properties[str(year)]['Number of edges'])
+            large_connected.append(time_properties[str(year)]['Largest Connected Component'])
+            num_connected.append(time_properties[str(year)]['Number of Connected Components'])
+            density.append(time_properties[str(year)]['Density of Components'])
+            
+            if time_properties[str(year)]['Is Connected']=='False':
+                connected_tf.append(1)
+                #average.append(time_properties[str(year)]['Average clustering coefficient of giant component'])
+                diameter.append(time_properties[str(year)]['Diameter of giant component'])
+            else:
+                connected_tf.append(0)
+                #average.append(0)
+                diameter.append(0)
+    
+    # Plotting nodes
+    bars1 = plt.bar([year - bar_width/2 for year in years], nodes, bar_width, color='purple', label='Number of Nodes')
+    bars2 = plt.bar([year + bar_width/2 for year in years], edges, bar_width, color='orange', label='Number of Edges')
+    plt.title('Number of Nodes and Edges Over the Years')
+    plt.xlabel('Year')
+    plt.ylabel('Count')
+    plt.grid(axis='y')
+    plt.xticks(years[::2], rotation=45)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    bar_width = 0.4
+    index = np.arange(len(years))
+    plt.figure(figsize=(13, 6)) 
+    plt.bar(index, large_connected, color=['lightseagreen' if value == 1 else 'cornflowerblue' for value in connected_tf])
+    plt.title('Number of nodes in Largest Connected Component')
+    plt.xlabel('Year')
+    plt.ylabel('Count')
+    plt.xticks(index, years, rotation=45)
+    plt.grid(axis='y')
+    plt.tight_layout()
+    purple_patch = plt.Rectangle((0,0),1,1,fc="lightseagreen", edgecolor = 'none')
+    blue_patch = plt.Rectangle((0,0),1,1,fc='cornflowerblue', edgecolor = 'none')
+    plt.legend([purple_patch, blue_patch], ['Is connected', 'Is not connected'], loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.show()
+
+
+
+    bar_width = 0.4
+    index = np.arange(len(years))
+    plt.figure(figsize=(13, 6)) 
+    plt.bar(index, num_connected, color=['rebeccapurple' if value == 1 else 'cornflowerblue' for value in connected_tf])
+    plt.title('Number of disjoint subgraphs')
+    plt.xlabel('Year')
+    plt.ylabel('Count')
+    plt.xticks(index, years, rotation=45)
+    plt.grid(axis='y')
+    plt.tight_layout()
+    purple_patch = plt.Rectangle((0,0),1,1,fc="rebeccapurple", edgecolor = 'none')
+    blue_patch = plt.Rectangle((0,0),1,1,fc='cornflowerblue', edgecolor = 'none')
+    plt.legend([purple_patch, blue_patch], ['Is connected', 'Is not connected'], loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.show()
+
+    bar_width = 0.4
+    index = np.arange(len(years))
+    plt.figure(figsize=(13, 6)) 
+    plt.bar(index, density, color=['firebrick' if value == 1 else 'cornflowerblue' for value in connected_tf])
+    plt.title('Density')
+    plt.xlabel('Year')
+    plt.ylabel('Count')
+    plt.xticks(index, years, rotation=45)
+    plt.grid(axis='y')
+    plt.tight_layout()
+    purple_patch = plt.Rectangle((0,0),1,1,fc="firebrick", edgecolor = 'none')
+    blue_patch = plt.Rectangle((0,0),1,1,fc='cornflowerblue', edgecolor = 'none')
+    plt.legend([purple_patch, blue_patch], ['Is connected', 'Is not connected'], loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.show()
+
+    bar_width = 0.4
+    index = np.arange(len(years))
+    plt.figure(figsize=(13, 6)) 
+    plt.bar(index, diameter, color=['mediumorchid' if value == 1 else 'cornflowerblue' for value in connected_tf])
+    plt.title('Diameter')
+    plt.xlabel('Year')
+    plt.ylabel('Count')
+    plt.xticks(index, years, rotation=45)
+    plt.grid(axis='y')
+    plt.tight_layout()
+    purple_patch = plt.Rectangle((0,0),1,1,fc="mediumorchid", edgecolor = 'none')
+    blue_patch = plt.Rectangle((0,0),1,1,fc='cornflowerblue', edgecolor = 'none')
+    plt.legend([purple_patch, blue_patch], ['Is connected', 'Is not connected'], loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.show()
 
 ##############################################################################################
 ######## Code for Question 3 (Random Network Generation)
@@ -484,6 +617,8 @@ def main():
     parser.add_argument(
         "-s", "--scrape", action='store_true'
     )
+    parser.add_argument("-k", "--kmax", default=50, type=int, 
+                        help="kmax value, defaults to 50")
 
     args = parser.parse_args()
 
@@ -517,6 +652,7 @@ def main():
 
     # Question 2
     print("===========================Question 2===========================")
+    qn2(original_graph)
     print("================================================================\n")
 
     # Question 3
