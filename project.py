@@ -150,7 +150,6 @@ def get_network_stats(graph: nx.Graph):
         "closeness centrality": nx.closeness_centrality(graph),
         "betweenness centrality": nx.betweenness_centrality(graph),
         "eigenvector centrality": nx.eigenvector_centrality(giant_component),
-        "shortest path": nx.average_shortest_path_length(giant_component),
         "average path length": nx.average_shortest_path_length(giant_component),
         "assortativity": nx.degree_assortativity_coefficient(graph),
         "density": nx.density(graph),
