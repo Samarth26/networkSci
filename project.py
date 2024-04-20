@@ -1,5 +1,5 @@
 import argparse
-from multiprocessing.pool import ThreadPool
+import difflib
 import time
 import grequests
 
@@ -8,13 +8,11 @@ from bs4 import BeautifulSoup
 from collections import Counter, defaultdict
 import networkx as nx
 import json
-#from thefuzz import fuzz
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import factorial
 from typing import Any, Dict, List, Set
-from fuzzywuzzy import fuzz
 
 from sortedcontainers import SortedList
 
@@ -90,18 +88,28 @@ def read_data(path: str) -> pd.DataFrame:
     return df
 
 
-def get_name_match_score(n1, n2):
+def get_best_name_match_score(n1, names):
     c1 = Counter(n1.lower())
-    c2 = Counter(n2.lower())
 
-    diff = 0
-    for c in "abcdefghijklmnopqrstuvwxyz":
-        diff += abs(c1[c] - c2[c])
+    best_match = ""
+    best_score = 0
+
+    for n2 in names:
+        c2 = Counter(n2.lower())
+
+        diff = 0
+        for c in "abcdefghijklmnopqrstuvwxyz":
+            diff += abs(c1[c] - c2[c])
+        
+        if diff > 5:
+            continue
+
+        # score = fuzz.ratio(n1, n2)
+        score = difflib.SequenceMatcher(None, n1, n2).ratio()
+        if score > best_score:
+            best_match, best_score = n2, score
     
-    if diff > 5:
-        return 0
-
-    return fuzz.ratio(n1, n2)
+    return best_match if best_score > 0.9 else None
 
 
 def build_graph(networkList, df):
@@ -112,42 +120,23 @@ def build_graph(networkList, df):
 
     name_lookup = df["dblp_name"].str.lower().to_list()
 
-    all_names = {}
-    for network in networkList:
-        for publicationList in network['publish-info']:
-            for co_author_name in publicationList['co-authors']:
-                all_names[co_author_name.lower()] = ""
-
     print("building lookup table for best match for all names found")
-    for i, name in enumerate(all_names):
-        print(f"{i}/{len(all_names)}", end="\r")
-
-        matches = [get_name_match_score(n, name) for n in name_lookup]
-
-        best_match = (0, 0)
-
-        for i, m in enumerate(matches):
-            if m > best_match[1]:
-                best_match = (i, m)
-
-        if best_match[1] <= 90:
-            continue
-
-        matched_name = name_lookup[best_match[0]]
-
-        all_names[name] = matched_name
+    from fuzzyset import FuzzySet
+    all_names = FuzzySet(name_lookup)
+    from tqdm import tqdm
 
     print("building network edges")
-    for i, network in enumerate(networkList):
-        print(f"{i}/{len(networkList)}", end="\r")
+    for network in tqdm(networkList):
+        # print(f"{i}/{len(networkList)}", end="\r")
         main_name = network['name'].lower()
         for publicationList in network['publish-info']:
             publish_date = int(publicationList['publish-date'][0])
             for co_author_name in publicationList['co-authors']:
                 co_author_name = co_author_name.lower()
 
-                matched_name = all_names[co_author_name]
-                if matched_name == main_name or not matched_name:
+                match_score, matched_name = all_names.get(co_author_name)[0]
+
+                if match_score < 0.9 or matched_name == main_name:
                     continue
                 graph.add_edge(main_name, matched_name, year = publish_date)
     return graph
@@ -184,6 +173,7 @@ def get_network_stats(graph: nx.Graph):
     return stats
 
 def plot_network(graph: nx.Graph, stats):
+    print("plotting network")
     import numpy as np
     import matplotlib.colors as mcolors
     import matplotlib.cm as cm
@@ -191,7 +181,7 @@ def plot_network(graph: nx.Graph, stats):
     cent = np.fromiter(stats.get("degree centrality").values(), float)
     sizes = cent / np.max(cent) * 200
     cent2 = np.fromiter(stats.get("closeness centrality").values(), float)
-    print(cent2)
+    # print(cent2)
     normalize = mcolors.Normalize(vmin=cent2.min(), vmax=cent2.max())
     colormap = cm.viridis
 
@@ -721,15 +711,15 @@ def main():
     print("===========================Question 1===========================")
     plot_degree_dist(original_graph)
     plot_assortative(original_graph)
-    try:
-        f = open("statsNetwork.txt", "r")
-        network_stats = f.read()
-        print(network_stats)
-        plot_network(original_graph, network_stats)
-    except:
-        network_stats = get_network_stats(original_graph)
-        print(network_stats)
-        plot_network(original_graph, network_stats)
+    # try:
+    #     f = open("statsNetwork.txt", "r")
+    #     network_stats = f.read()
+    #     print(network_stats)
+    #     plot_network(original_graph, network_stats)
+    # except:
+    network_stats = get_network_stats(original_graph)
+    print(network_stats)
+    plot_network(original_graph, network_stats)
     
     print("================================================================\n")
 
