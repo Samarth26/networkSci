@@ -104,21 +104,13 @@ def build_graph(networkList, df):
             publish_date = int(publicationList['publish-date'][0])
             for co_author_name in publicationList['co-authors']:
                 co_author_name = co_author_name.lower()
-                similar_names = False
-                same_person = False
 
                 if fuzz.ratio(main_name.lower(), co_author_name) > 90:
-                    same_person = True
+                    continue
 
-                for name in name_lookup.keys():
-                    if(main_name.lower() != name.lower()):
-                        if fuzz.ratio(name.lower(), co_author_name) > 80:
-                            similar_names = True
-                            break
-               
-                  
+                similar_names = any(fuzz.ratio(name.lower(), co_author_name) for name in name_lookup.keys())
 
-                if similar_names == False or same_person == True:
+                if not similar_names:
                     continue
 
                 # check if there is a similar name in name_lookup as the co_author_name
