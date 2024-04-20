@@ -1,5 +1,6 @@
 import argparse
 import difflib
+import os
 import time
 import grequests
 
@@ -146,25 +147,25 @@ def build_graph(networkList, df):
 ######## Code for Question 1 (network stats)
 ##############################################################################################
 
-def get_network_stats(graph: nx.Graph):
+def get_network_stats(graph: nx.Graph, network_name: str):
     giant_component: nx.Graph = graph.subgraph(max(nx.connected_components(graph), key=len))
-    f = open("statsNetwork.txt", "a")
+    f = open(os.path.join("Results", f"{network_name} stats.txt"), "w")
 
     stats = {
         "nodeCount": graph.number_of_nodes(),
-        "nodeCountGC": giant_component.number_of_nodes(),
         "edgeCount": graph.size(),
         "meanDegree": np.mean(list(dict(graph.degree()).values())),
         "meanClusteringCoeff": nx.average_clustering(graph),
         "diameter": nx.approximation.diameter(giant_component),
         "GCSize": giant_component.number_of_nodes(),
-        "degree centrality": nx.degree_centrality(graph),
-        "closeness centrality": nx.closeness_centrality(graph),
-        "betweenness centrality": nx.betweenness_centrality(graph),
-        "eigenvector centrality": nx.eigenvector_centrality(giant_component),
+        "degree centrality": np.mean([*nx.degree_centrality(graph).values()]),
+        "closeness centrality": np.mean([*nx.closeness_centrality(graph).values()]),
+        "betweenness centrality": np.mean([*nx.betweenness_centrality(graph).values()]),
         "average path length": nx.average_shortest_path_length(giant_component),
         "assortativity": nx.degree_assortativity_coefficient(graph),
         "density": nx.density(graph),
+        "number of components": nx.number_connected_components(graph),
+        "is connected": nx.is_connected(graph)
     }
 
     f.write(str(stats))
@@ -172,15 +173,18 @@ def get_network_stats(graph: nx.Graph):
 
     return stats
 
-def plot_network(graph: nx.Graph, stats):
+def plot_network(graph: nx.Graph, network_name):
     print("plotting network")
     import numpy as np
     import matplotlib.colors as mcolors
     import matplotlib.cm as cm
 
-    cent = np.fromiter(stats.get("degree centrality").values(), float)
+    deg_centrality = nx.degree_centrality(graph)
+    close_centrality = nx.closeness_centrality(graph)
+
+    cent = np.fromiter(deg_centrality.values(), float)
     sizes = cent / np.max(cent) * 200
-    cent2 = np.fromiter(stats.get("closeness centrality").values(), float)
+    cent2 = np.fromiter(close_centrality.values(), float)
     # print(cent2)
     normalize = mcolors.Normalize(vmin=cent2.min(), vmax=cent2.max())
     colormap = cm.viridis
@@ -193,10 +197,13 @@ def plot_network(graph: nx.Graph, stats):
     pos = nx.spring_layout(graph)
 
     nx.draw(graph, pos, node_size=sizes, node_color=sizes, cmap=colormap)
-    plt.show()
+
+    plt.savefig(os.path.join("Results", f"{network_name} graph.png"))
+    plt.clf()
+    # plt.show()
 
 
-def plot_degree_dist(input_graph, ylim=(1e-5, 1)):
+def plot_degree_dist(input_graph, network_name, ylim=(1e-5, 1)):
     axs = plt.subplots(1, 1)
     ax = axs[0]
 
@@ -225,10 +232,12 @@ def plot_degree_dist(input_graph, ylim=(1e-5, 1)):
     plt.ylabel('Degree (bin) Probability')
     plt.title('Degree pdf')
 
-    plt.show()
+    plt.savefig(os.path.join("Results", f"{network_name} degree distribution.png"))
+    plt.clf()
+    # plt.show()
 
 
-def plot_assortative(input_graph):
+def plot_assortative(input_graph, network_name):
     degree = dict(input_graph.degree())
     avg_neigh_degree = nx.average_neighbor_degree(input_graph)
     x = []
@@ -244,7 +253,9 @@ def plot_assortative(input_graph):
     plt.xlabel('Degree')
     plt.ylabel('Average Neighbor Degree')
     plt.title('Average Neighbor Degree vs Degree')
-    plt.show()
+    plt.savefig(os.path.join("Results", f"{network_name} assortatativeness.png"))
+    plt.clf()
+    # plt.show()
 
 
 ##############################################################################################
@@ -264,7 +275,9 @@ def qn2(graph: nx.Graph):
     time_properties = {}
     for year in range(1972, 2024 + 1):
         filtered_network = filter_network_by_year(graph, year)
-        network_properties = get_network_stats(filtered_network)
+        if not filtered_network.nodes:
+            continue
+        network_properties = get_network_stats(filtered_network, f"network for {year}")
         print(f"Year: {year}")
 
         if len(network_properties) != 0:
@@ -287,24 +300,27 @@ def qn2(graph: nx.Graph):
     #average = []
     diameter = []
 
+    plt.figure(figsize=(13, 6)) 
+
     for year in range(1972, 2024 + 1):
-        if str(year) in time_properties and time_properties[str(year)] is not None:
+        if year in time_properties and time_properties[year] is not None:
             years.append(year)
-            nodes.append(time_properties[str(year)]['Number of nodes'])
-            edges.append(time_properties[str(year)]['Number of edges'])
-            large_connected.append(time_properties[str(year)]['Largest Connected Component'])
-            num_connected.append(time_properties[str(year)]['Number of Connected Components'])
-            density.append(time_properties[str(year)]['Density of Components'])
+            nodes.append(time_properties[year]['nodeCount'])
+            edges.append(time_properties[year]['edgeCount'])
+            large_connected.append(time_properties[year]['GCSize'])
+            num_connected.append(time_properties[year]['number of components'])
+            density.append(time_properties[year]['density'])
             
-            if time_properties[str(year)]['Is Connected']=='False':
+            if not time_properties[year]['is connected']:
                 connected_tf.append(1)
                 #average.append(time_properties[str(year)]['Average clustering coefficient of giant component'])
-                diameter.append(time_properties[str(year)]['Diameter of giant component'])
+                diameter.append(time_properties[year]['diameter'])
             else:
                 connected_tf.append(0)
                 #average.append(0)
                 diameter.append(0)
     
+    bar_width = 0.4
     # Plotting nodes
     bars1 = plt.bar([year - bar_width/2 for year in years], nodes, bar_width, color='purple', label='Number of Nodes')
     bars2 = plt.bar([year + bar_width/2 for year in years], edges, bar_width, color='orange', label='Number of Edges')
@@ -315,9 +331,10 @@ def qn2(graph: nx.Graph):
     plt.xticks(years[::2], rotation=45)
     plt.legend()
     plt.tight_layout()
-    plt.show()
+    plt.savefig(os.path.join("Results", "network node+edge count over years.png"))
+    plt.clf()
+    # plt.show()
 
-    bar_width = 0.4
     index = np.arange(len(years))
     plt.figure(figsize=(13, 6)) 
     plt.bar(index, large_connected, color=['lightseagreen' if value == 1 else 'cornflowerblue' for value in connected_tf])
@@ -330,7 +347,9 @@ def qn2(graph: nx.Graph):
     purple_patch = plt.Rectangle((0,0),1,1,fc="lightseagreen", edgecolor = 'none')
     blue_patch = plt.Rectangle((0,0),1,1,fc='cornflowerblue', edgecolor = 'none')
     plt.legend([purple_patch, blue_patch], ['Is connected', 'Is not connected'], loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.show()
+    plt.savefig(os.path.join("Results", "giant component size over years.png"))
+    plt.clf()
+    # plt.show()
 
 
 
@@ -347,7 +366,9 @@ def qn2(graph: nx.Graph):
     purple_patch = plt.Rectangle((0,0),1,1,fc="rebeccapurple", edgecolor = 'none')
     blue_patch = plt.Rectangle((0,0),1,1,fc='cornflowerblue', edgecolor = 'none')
     plt.legend([purple_patch, blue_patch], ['Is connected', 'Is not connected'], loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.show()
+    plt.savefig(os.path.join("Results", "number of disjoint subgraphs over years.png"))
+    plt.clf()
+    # plt.show()
 
     bar_width = 0.4
     index = np.arange(len(years))
@@ -362,7 +383,9 @@ def qn2(graph: nx.Graph):
     purple_patch = plt.Rectangle((0,0),1,1,fc="firebrick", edgecolor = 'none')
     blue_patch = plt.Rectangle((0,0),1,1,fc='cornflowerblue', edgecolor = 'none')
     plt.legend([purple_patch, blue_patch], ['Is connected', 'Is not connected'], loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.show()
+    plt.savefig(os.path.join("Results", "network density over years.png"))
+    plt.clf()
+    # plt.show()
 
     bar_width = 0.4
     index = np.arange(len(years))
@@ -377,7 +400,9 @@ def qn2(graph: nx.Graph):
     purple_patch = plt.Rectangle((0,0),1,1,fc="mediumorchid", edgecolor = 'none')
     blue_patch = plt.Rectangle((0,0),1,1,fc='cornflowerblue', edgecolor = 'none')
     plt.legend([purple_patch, blue_patch], ['Is connected', 'Is not connected'], loc='center left', bbox_to_anchor=(1, 0.5))
-    plt.show()
+    plt.savefig(os.path.join("Results", "network diameter over years.png"))
+    plt.clf()
+    # plt.show()
 
 ##############################################################################################
 ######## Code for Question 3 (Random Network Generation)
@@ -697,6 +722,9 @@ def main():
     df = df.drop_duplicates(subset='dblp')
     df = df.reset_index(drop=True)
 
+    from pathlib import Path
+    Path("Results").mkdir(parents=True, exist_ok=True)
+
     # Make an array with the names in the networkList
     names = []
     for i in range(len(networkList)):
@@ -708,18 +736,13 @@ def main():
     original_graph = build_graph(networkList, df)
 
     # Question 1
-    print("===========================Question 1===========================")
-    plot_degree_dist(original_graph)
-    plot_assortative(original_graph)
-    # try:
-    #     f = open("statsNetwork.txt", "r")
-    #     network_stats = f.read()
-    #     print(network_stats)
-    #     plot_network(original_graph, network_stats)
-    # except:
-    network_stats = get_network_stats(original_graph)
-    print(network_stats)
-    plot_network(original_graph, network_stats)
+    # print("===========================Question 1===========================")
+    # plot_degree_dist(original_graph, "inputted network")
+    # plot_assortative(original_graph, "inputted network")
+    # print("Calculating network stats")
+    # network_stats = get_network_stats(original_graph, "inputted network")
+    # print(network_stats)
+    # plot_network(original_graph, "inputted network")
     
     print("================================================================\n")
 
@@ -731,21 +754,27 @@ def main():
 
     # Question 3
     # higher values of p lead the poisson calculation to become nan foor higher degrees
-    print("===========================Question 3===========================")
-    rand_graph = createRandNetwork(original_graph, 0.1)
-    plot_degree_dist(rand_graph, ylim=(0, 1))
-    plot_assortative(rand_graph)
-    print(get_network_stats(rand_graph))
-    print("================================================================\n")
+    # print("===========================Question 3===========================")
+    # rand_graph = createRandNetwork(original_graph, 0.1)
+    # plot_degree_dist(rand_graph, "random network", ylim=(0, 1))
+    # plot_assortative(rand_graph, "random network")
 
-    # Question 4
-    print("===========================Question 4===========================")
-    diversified_graph = build_graph(networkList, df)
-    diversified_graph = qn4(diversified_graph, 50)
-    plot_degree_dist(diversified_graph, ylim=(1e-5, 1))
-    plot_assortative(diversified_graph)
-    print(get_network_stats(diversified_graph))
-    print("================================================================\n")
+    # print("Calculating random network stats")
+    # network_stats = get_network_stats(rand_graph, "random network")
+    # print(network_stats)
+    # plot_network(rand_graph, "random network")
+    # print("================================================================\n")
+
+    # # # Question 4
+    # print("===========================Question 4===========================")
+    # diversified_graph = build_graph(networkList, df)
+    # diversified_graph = qn4(diversified_graph, 50)
+    # plot_degree_dist(diversified_graph, "modified network", ylim=(1e-5, 1))
+    # plot_assortative(diversified_graph, "modified network")
+    # network_stats = get_network_stats(diversified_graph, "modified network")
+    # print(network_stats)
+    # plot_network(diversified_graph, "modified network")
+    # print("================================================================\n")
 
 
 if __name__ == "__main__":
