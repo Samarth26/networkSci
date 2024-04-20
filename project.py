@@ -1,10 +1,11 @@
 import argparse
+from multiprocessing.pool import ThreadPool
 import time
 import grequests
 
 from bs4 import BeautifulSoup
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 import networkx as nx
 import json
 #from thefuzz import fuzz
@@ -89,14 +90,54 @@ def read_data(path: str) -> pd.DataFrame:
     return df
 
 
+def get_name_match_score(n1, n2):
+    c1 = Counter(n1.lower())
+    c2 = Counter(n2.lower())
+
+    diff = 0
+    for c in "abcdefghijklmnopqrstuvwxyz":
+        diff += abs(c1[c] - c2[c])
+    
+    if diff > 5:
+        return 0
+
+    return fuzz.ratio(n1, n2)
+
+
 def build_graph(networkList, df):
     graph = nx.Graph()
     for author_info in networkList:
         name = author_info['name'].lower()
         graph.add_node(name, institution=author_info["institution"], country=author_info["country"])
 
-    name_lookup = {row["dblp_name"]: i for i, row in df.iterrows()}
+    name_lookup = df["dblp_name"].str.lower().to_list()
 
+    all_names = {}
+    for network in networkList:
+        for publicationList in network['publish-info']:
+            for co_author_name in publicationList['co-authors']:
+                all_names[co_author_name.lower()] = ""
+
+    print("building lookup table for best match for all names found")
+    for i, name in enumerate(all_names):
+        print(f"{i}/{len(all_names)}", end="\r")
+
+        matches = [get_name_match_score(n, name) for n in name_lookup]
+
+        best_match = (0, 0)
+
+        for i, m in enumerate(matches):
+            if m > best_match[1]:
+                best_match = (i, m)
+
+        if best_match[1] <= 90:
+            continue
+
+        matched_name = name_lookup[best_match[0]]
+
+        all_names[name] = matched_name
+
+    print("building network edges")
     for i, network in enumerate(networkList):
         print(f"{i}/{len(networkList)}", end="\r")
         main_name = network['name'].lower()
@@ -105,20 +146,10 @@ def build_graph(networkList, df):
             for co_author_name in publicationList['co-authors']:
                 co_author_name = co_author_name.lower()
 
-                if fuzz.ratio(main_name.lower(), co_author_name) > 90:
+                matched_name = all_names[co_author_name]
+                if matched_name == main_name or not matched_name:
                     continue
-
-                similar_names = any(fuzz.ratio(name.lower(), co_author_name) for name in name_lookup.keys())
-
-                if not similar_names:
-                    continue
-
-                # check if there is a similar name in name_lookup as the co_author_name
-                
-
-
-                graph.add_edge(main_name, co_author_name, year = publish_date)
-
+                graph.add_edge(main_name, matched_name, year = publish_date)
     return graph
 
 

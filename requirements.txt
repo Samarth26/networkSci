@@ -6,6 +6,8 @@ grequests
 bs4
 xlrd
 thefuzz
+fuzzywuzzy[speedup]
 matplotlib
 scipy
 lxml
+python-Levenshtein
