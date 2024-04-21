@@ -1,0 +1,1 @@
+{'nodeCount': 6, 'edgeCount': 3, 'meanDegree': 1.0, 'meanClusteringCoeff': 0.0, 'diameter': 1, 'GCSize': 2, 'degree centrality': 0.19999999999999998, 'closeness centrality': 0.19999999999999998, 'betweenness centrality': 0.0, 'average path length': 1.0, 'assortativity': nan, 'density': 0.2, 'number of components': 3, 'is connected': False}
