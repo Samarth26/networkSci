@@ -44,7 +44,7 @@ def read_data(path: str) -> pd.DataFrame:
         while not done:
             urls = df["dblp"].iloc[start: start + 20]
             results = grequests.map((grequests.get(u, headers=headers) for u in urls))
-            done = all(r.status_code != 429 for r in results)
+            done = all(r.status_code != 429 for r in results if r.status_code != 200)
             if not done:
                 sleeptime = max(int(r.headers.get("Retry-After", 0)) for r in results)
                 print("retrying after: ", sleeptime)
@@ -54,24 +54,28 @@ def read_data(path: str) -> pd.DataFrame:
 
         for r, row in df.iloc[start: start + len(urls)].reset_index(inplace=False).iterrows():
             response = results[r]
-            soup = BeautifulSoup(response.content, 'lxml', from_encoding="utf8")
-            main = soup.find_all('cite', class_='data tts-content')
+            try:
+                soup = BeautifulSoup(response.content, 'lxml', from_encoding="utf8")
+                main = soup.find_all('cite', class_='data tts-content')
 
-            dblp_name = soup.find("span", {"class": "name primary", "itemprop":"name"})
-            dblp_name = dblp_name.text.lower() if dblp_name else row["name"].lower()
+                dblp_name = soup.find("span", {"class": "name primary", "itemprop":"name"})
+                dblp_name = dblp_name.text.lower() if dblp_name else row["name"].lower()
 
-            combined_info = []
-            for i in main:
-                coauthors = i.find_all('span', itemprop='author')
-                published = i.find_all('span', itemprop='datePublished')
-                authors = [x.find('span', itemprop='name').text for x in coauthors]
-                date = [x.text for x in published]
-                
-                combined = {
-                    'co-authors': authors,
-                    'publish-date':date
-                }
-                combined_info.append(combined)
+                combined_info = []
+                for i in main:
+                    coauthors = i.find_all('span', itemprop='author')
+                    published = i.find_all('span', itemprop='datePublished')
+                    authors = [x.find('span', itemprop='name').text for x in coauthors]
+                    date = [x.text for x in published]
+                    
+                    combined = {
+                        'co-authors': authors,
+                        'publish-date':date
+                    }
+                    combined_info.append(combined)
+            except:
+                dblp_name = row["name"].lower()
+                combined_info = []
 
             json_data.append({
                 'name': dblp_name,
@@ -685,8 +689,8 @@ def qn4(graph: nx.Graph, kmax: int):
     # decreasing order priority queue to allow more isolates
     giant_component: nx.Graph = graph.subgraph(max(nx.connected_components(graph), key=len))
     nodePQ = SortedList(
-        (i for i in graph if len(graph[i]) < kmax and i not in giant_component), 
-        key=lambda i: -len(graph[i])
+        (i for i in graph if 0 < len(graph[i]) < kmax and i not in giant_component), 
+        key=lambda i: len(graph[i])
     )
 
     while edgesRemoved and len(nodePQ):
@@ -736,13 +740,13 @@ def main():
     original_graph = build_graph(networkList, df)
 
     # Question 1
-    # print("===========================Question 1===========================")
-    # plot_degree_dist(original_graph, "inputted network")
-    # plot_assortative(original_graph, "inputted network")
-    # print("Calculating network stats")
-    # network_stats = get_network_stats(original_graph, "inputted network")
-    # print(network_stats)
-    # plot_network(original_graph, "inputted network")
+    print("===========================Question 1===========================")
+    plot_degree_dist(original_graph, "inputted network")
+    plot_assortative(original_graph, "inputted network")
+    print("Calculating network stats")
+    network_stats = get_network_stats(original_graph, "inputted network")
+    print(network_stats)
+    plot_network(original_graph, "inputted network")
     
     print("================================================================\n")
 
@@ -754,27 +758,31 @@ def main():
 
     # Question 3
     # higher values of p lead the poisson calculation to become nan foor higher degrees
-    # print("===========================Question 3===========================")
-    # rand_graph = createRandNetwork(original_graph, 0.1)
-    # plot_degree_dist(rand_graph, "random network", ylim=(0, 1))
-    # plot_assortative(rand_graph, "random network")
+    print("===========================Question 3===========================")
+    rand_graph = createRandNetwork(original_graph, 0.1)
+    plot_degree_dist(rand_graph, "random network", ylim=(0, 1))
+    plot_assortative(rand_graph, "random network")
 
-    # print("Calculating random network stats")
-    # network_stats = get_network_stats(rand_graph, "random network")
-    # print(network_stats)
-    # plot_network(rand_graph, "random network")
-    # print("================================================================\n")
+    print("Calculating random network stats")
+    network_stats = get_network_stats(rand_graph, "random network")
+    print(network_stats)
+    plot_network(rand_graph, "random network")
+    print("================================================================\n")
 
-    # # # Question 4
-    # print("===========================Question 4===========================")
-    # diversified_graph = build_graph(networkList, df)
-    # diversified_graph = qn4(diversified_graph, 50)
-    # plot_degree_dist(diversified_graph, "modified network", ylim=(1e-5, 1))
-    # plot_assortative(diversified_graph, "modified network")
-    # network_stats = get_network_stats(diversified_graph, "modified network")
-    # print(network_stats)
-    # plot_network(diversified_graph, "modified network")
-    # print("================================================================\n")
+    # # Question 4
+    print("===========================Question 4===========================")
+    print(f"Number of isolates in original graph: {nx.number_of_isolates(original_graph)}")
+    print(f"Max degree in original graph: {max(d[1] for d in original_graph.degree)}")
+    diversified_graph = original_graph # build_graph(networkList, df)
+    diversified_graph = qn4(diversified_graph, 50)
+    plot_degree_dist(diversified_graph, "modified network", ylim=(1e-5, 1))
+    plot_assortative(diversified_graph, "modified network")
+    network_stats = get_network_stats(diversified_graph, "modified network")
+    print(network_stats)
+    print(f"Number of isolates in modified graph: {nx.number_of_isolates(diversified_graph)}")
+    print(f"Max degree in modified graph: {max(d[1] for d in diversified_graph.degree)}")
+    plot_network(diversified_graph, "modified network")
+    print("================================================================\n")
 
 
 if __name__ == "__main__":
